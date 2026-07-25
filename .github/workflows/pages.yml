@@ -1,0 +1,214 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [core-released]
+
+jobs:
+  deploy:
+    name: Build and deploy docs site
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout docs
+        uses: actions/checkout@v7
+
+      # Resolved fresh on every run (own push or wirestead's release
+      # dispatch) instead of trusting a dispatch payload, so a re-run always
+      # matches whatever the latest published release actually is.
+      - name: Resolve latest wirestead release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.WIRESTEAD_CORE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo wirestead/wirestead --json tagName -q .tagName)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout wirestead core at release
+        uses: actions/checkout@v7
+        with:
+          repository: wirestead/wirestead
+          ref: ${{ steps.release.outputs.tag }}
+          path: external/wirestead
+          token: ${{ secrets.WIRESTEAD_CORE_READ_TOKEN }}
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Generate API reference
+        run: ./scripts/generate_docs.sh
+
+      # The coverage report is wirestead's own CI output (test coverage of
+      # its exact release commit), not something generated here - pull the
+      # artifact from wirestead's coverage.yml run for that release rather
+      # than recomputing it.
+      - name: Resolve latest successful coverage run
+        id: coverage_run
+        env:
+          GH_TOKEN: ${{ secrets.WIRESTEAD_CORE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_id=$(gh run list --repo wirestead/wirestead --workflow=coverage.yml \
+            --event=release --status=success --json databaseId -q '.[0].databaseId')
+          if [ -z "$run_id" ]; then
+            echo "::error::No successful release-triggered coverage.yml run found" >&2
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          repository: wirestead/wirestead
+          run-id: ${{ steps.coverage_run.outputs.run_id }}
+          github-token: ${{ secrets.WIRESTEAD_CORE_READ_TOKEN }}
+          name: coverage-report
+          path: coverage_html
+
+      - name: Download coverage data
+        uses: actions/download-artifact@v4
+        with:
+          repository: wirestead/wirestead
+          run-id: ${{ steps.coverage_run.outputs.run_id }}
+          github-token: ${{ secrets.WIRESTEAD_CORE_READ_TOKEN }}
+          name: coverage-data
+          path: coverage_data
+
+      - name: Generate coverage badge JSON
+        id: coverage_badge
+        run: |
+          set -euo pipefail
+
+          coverage_percent=$(grep -m1 "lines" coverage_data/coverage_summary.txt | awk '{print $2}' | tr -d '%')
+          if [ -z "$coverage_percent" ]; then
+            echo "⚠️  coverage_percent was empty, defaulting to 0" >&2
+            coverage_percent="0"
+          fi
+
+          cov_formatted=$(awk -v v="$coverage_percent" 'BEGIN{printf "%.1f", v+0}')
+
+          color="red"
+          grade="poor"
+          if awk -v v="$coverage_percent" 'BEGIN{exit !(v>=80)}'; then
+            color="blue"
+            grade="excellent"
+          elif awk -v v="$coverage_percent" 'BEGIN{exit !(v>=60)}'; then
+            color="green"
+            grade="good"
+          elif awk -v v="$coverage_percent" 'BEGIN{exit !(v>=40)}'; then
+            color="yellow"
+            grade="fair"
+          fi
+
+          mkdir -p coverage_html/badges
+          cat > coverage_html/badges/coverage.json << EOF
+          {
+            "schemaVersion": 1,
+            "label": "test coverage",
+            "message": "${cov_formatted}%",
+            "color": "${color}"
+          }
+          EOF
+
+          {
+            echo "coverage_percent=${cov_formatted}"
+            echo "coverage_grade=${grade}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create coverage index page
+        run: |
+          set -euo pipefail
+          cd coverage_html
+          COVERAGE="${{ steps.coverage_badge.outputs.coverage_percent }}%"
+          GRADE="${{ steps.coverage_badge.outputs.coverage_grade }}"
+          RELEASE="${{ steps.release.outputs.tag }}"
+          if [ -f index.html ]; then
+            mv index.html index-original.html
+          fi
+          cat > index.html << EOF
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Wirestead Coverage Report</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: #f5f5f5;
+              }
+              .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                background: white;
+                padding: 40px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              }
+              h1 { color: #333; margin-bottom: 10px; }
+              .coverage { font-size: 48px; font-weight: bold; color: #4CAF50; margin: 20px 0; }
+              .grade { font-size: 24px; color: #666; margin: 10px 0; text-transform: uppercase; }
+              .badge { margin: 20px 0; }
+              .links { margin-top: 30px; }
+              .link {
+                display: inline-block;
+                padding: 12px 24px;
+                background: #2196F3;
+                color: white;
+                text-decoration: none;
+                border-radius: 4px;
+                margin-right: 10px;
+              }
+              .link:hover { background: #1976D2; }
+              .timestamp { color: #666; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>🎯 Wirestead Code Coverage</h1>
+              <p class="timestamp">Release: ${RELEASE}</p>
+              <div class="coverage">Coverage: ${COVERAGE}</div>
+              <div class="grade">Grade: ${GRADE}</div>
+              <div class="badge">
+                <img src="https://img.shields.io/endpoint?url=https://wirestead.github.io/wirestead-docs/coverage/badges/coverage.json" alt="Coverage Badge">
+              </div>
+              <div class="links">
+                <a href="index-original.html" class="link">📊 Detailed Report</a>
+                <a href="https://github.com/wirestead/wirestead" class="link">📦 Repository</a>
+              </div>
+            </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Assemble Pages site
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp -r build/doxygen/html/. site/
+          mkdir -p site/coverage
+          cp -r coverage_html/. site/coverage/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

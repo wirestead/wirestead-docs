@@ -17,6 +17,10 @@ This repository contains:
 Generated documentation is not committed. Doxygen output is produced under
 `build/doxygen/` by local scripts and GitHub Actions.
 
+The published site (API reference + coverage report), built from the latest
+published `wirestead` release, is deployed to
+https://wirestead.github.io/wirestead-docs/ by `.github/workflows/pages.yml`.
+
 ## Documentation
 
 - [Documentation index](docs/index.md)
