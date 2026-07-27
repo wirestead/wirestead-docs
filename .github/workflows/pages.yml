@@ -90,7 +90,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          coverage_percent=$(grep -m1 "lines" coverage_data/coverage_summary.txt | awk '{print $2}' | tr -d '%')
+          # coverage_summary.txt is `lcov --list` output (a per-file table
+          # ending in a "Total:|NN.N%  ..." row), not `lcov --summary`
+          # output - the line-coverage percentage has to come from that
+          # Total row's first pipe-delimited field.
+          coverage_percent=$(grep "Total:" coverage_data/coverage_summary.txt | awk -F'|' '{print $2}' | awk '{print $1}' | tr -d '%' || true)
           if [ -z "$coverage_percent" ]; then
             echo "⚠️  coverage_percent was empty, defaulting to 0" >&2
             coverage_percent="0"
