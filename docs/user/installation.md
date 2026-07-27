@@ -230,4 +230,6 @@ cmake -S . -B build \
 
 - [Quick Start Guide](quickstart.md)
 - [API Reference](api_guide.md)
+- [Migration from Unilink](https://github.com/wirestead/wirestead/blob/main/docs/migration-from-unilink.md)
+- [Changelog](https://github.com/wirestead/wirestead/blob/main/CHANGELOG.md)
 - [Examples](https://github.com/wirestead/wirestead-examples)
