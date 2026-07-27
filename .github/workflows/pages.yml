@@ -24,13 +24,25 @@ jobs:
       # Resolved fresh on every run (own push or wirestead's release
       # dispatch) instead of trusting a dispatch payload, so a re-run always
       # matches whatever the latest published release actually is.
+      #
+      # `gh release view` (no tag) trusts GitHub's cached "latest" flag,
+      # which does not get recomputed when a draft release is published
+      # later out of tag-creation order - wirestead's release.yml always
+      # creates releases as drafts for manual review, so this bit for real
+      # (v0.9.1 stayed resolved to v0.9.0 after being published). Sort
+      # published, non-prerelease releases by publish time instead.
       - name: Resolve latest wirestead release
         id: release
         env:
           GH_TOKEN: ${{ secrets.WIRESTEAD_CORE_READ_TOKEN }}
         run: |
           set -euo pipefail
-          tag=$(gh release view --repo wirestead/wirestead --json tagName -q .tagName)
+          tag=$(gh api repos/wirestead/wirestead/releases \
+            --jq '[.[] | select(.draft==false and .prerelease==false)] | sort_by(.published_at) | last | .tag_name')
+          if [ -z "$tag" ] || [ "$tag" = "null" ]; then
+            echo "::error::No published, non-prerelease wirestead release found" >&2
+            exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Checkout wirestead core at release
