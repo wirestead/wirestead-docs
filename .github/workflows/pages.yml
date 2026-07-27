@@ -44,7 +44,7 @@ jobs:
       - name: Install Doxygen
         run: |
           sudo apt-get update
-          sudo apt-get install -y doxygen graphviz
+          sudo apt-get install -y doxygen graphviz lcov
 
       - name: Generate API reference
         run: ./scripts/generate_docs.sh
@@ -90,11 +90,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # coverage_summary.txt is `lcov --list` output (a per-file table
-          # ending in a "Total:|NN.N%  ..." row), not `lcov --summary`
-          # output - the line-coverage percentage has to come from that
-          # Total row's first pipe-delimited field.
-          coverage_percent=$(grep "Total:" coverage_data/coverage_summary.txt | awk -F'|' '{print $2}' | awk '{print $1}' | tr -d '%' || true)
+          # Derive the percentage from the tracefile directly with
+          # `lcov --summary` (the same command wirestead's own Coverage
+          # Check step uses for its threshold gate) instead of parsing the
+          # committed coverage_summary.txt, which is `lcov --list` output -
+          # a per-file table whose Total row's percentage does not agree
+          # with `--summary` for this tracefile (a known lcov 2.0 list/summary
+          # aggregation mismatch, not a wirestead coverage regression).
+          coverage_percent=$(lcov --summary coverage_data/coverage_filtered.info --rc lcov_branch_coverage=1 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%' || true)
           if [ -z "$coverage_percent" ]; then
             echo "⚠️  coverage_percent was empty, defaulting to 0" >&2
             coverage_percent="0"
