@@ -21,7 +21,7 @@ You are building an application using wirestead.
 | [Requirements](user/requirements.md) | Platform and dependency expectations |
 | [API Reference](user/api_guide.md) | Full public API: builders, wrappers, callbacks |
 | [API Stability](user/api_stability.md) | Public API, source compatibility, ABI, and deprecation policy |
-| [Migration from UniLink](https://github.com/wirestead/wirestead/blob/main/docs/migration-from-unilink.md) | Package, header, namespace, build, and Python migration guidance |
+| [Migration from Unilink](https://github.com/wirestead/wirestead/blob/main/docs/migration-from-unilink.md) | Package, header, namespace, build, and Python migration guidance |
 | [Changelog](https://github.com/wirestead/wirestead/blob/main/CHANGELOG.md) | Release history and compatibility notes |
 | [Transport Feature Matrix](user/transport_matrix.md) | Feature support across wrappers and transports |
 | [Troubleshooting](user/troubleshooting.md) | Common failures and debugging steps |

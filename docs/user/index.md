@@ -45,7 +45,7 @@ Step-by-step guides for each transport family:
 | Document | What it covers |
 |----------|----------------|
 | [Troubleshooting](troubleshooting.md) | Common failures and how to resolve them |
-| [Migration from UniLink](https://github.com/wirestead/wirestead/blob/main/docs/migration-from-unilink.md) | Package, header, namespace, build, and Python migration guidance |
+| [Migration from Unilink](https://github.com/wirestead/wirestead/blob/main/docs/migration-from-unilink.md) | Package, header, namespace, build, and Python migration guidance |
 | [Changelog](https://github.com/wirestead/wirestead/blob/main/CHANGELOG.md) | Release history and compatibility notes |
 | [Transport Feature Matrix](transport_matrix.md) | Feature support across TCP, UDP, Serial, and UDS |
 | [Python Bindings](python_bindings.md) | Moved to the Wirestead Python repository |
