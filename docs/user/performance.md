@@ -101,19 +101,28 @@ for (int i = 0; i < 1000; ++i) messages.push_back(msg);
 
 ## Network Optimization
 
-### 1. Batch Small Messages
-Sending many small packets incurs high system call overhead.
+### 1. Batching Is Automatic On Stream Transports
+Since v0.9.3 the stream transports — TCP, UDS and serial — drain several queued
+buffers into one scatter-gather write rather than issuing one send syscall per
+message. A loop of 1000 small sends measured 65 `sendmsg` calls, not 1000
+`sendto` calls.
 
 ```cpp
-// ❌ BAD: 1000 system calls
+// Fine. The transport batches these for you.
 for (int i = 0; i < 1000; ++i) client->send("msg");
-
-// ✅ GOOD: Batch into single send
-std::string batch;
-batch.reserve(4000);
-for (int i = 0; i < 1000; ++i) batch += "msg";
-client->send(batch);
 ```
+
+Concatenating messages yourself to save syscalls is no longer worth doing, and
+on a framed protocol it is actively wrong — joining payloads into one buffer
+destroys the message boundaries the framer needs.
+
+Two caps bound a batch: 16 buffers, and 256 KiB. Whichever binds first decides
+how much collapses, which is why the gain is largest for small payloads and
+tapers above 16 KiB where a single write already carries plenty. Measured on a
+Jetson Orin Nano against v0.9.2, sustained throughput rose 2.3x to 5.2x for
+payloads from 64 B to 4 KiB, and 1.1x to 1.4x at 16 KiB and above.
+
+UDP is unchanged: datagrams are not a stream, so there is nothing to coalesce.
 
 ### 2. Connection Reuse
 Reusing connections avoids repeated TCP handshake and connection setup overhead. For workloads with many short requests to the same peer, create the client once and reuse it across calls.
@@ -137,6 +146,28 @@ OS-level limits may still cap the effective value:
 sudo sysctl -w net.core.rmem_max=16777216  # 16 MB (OS limit)
 sudo sysctl -w net.core.wmem_max=16777216  # 16 MB (OS limit)
 ```
+
+### 4. Read Buffer
+Distinct from the socket buffers above. `receive_buffer_size` sets the kernel's
+`SO_RCVBUF`; the read buffer is how much of a filled socket buffer one read
+completion can take in userspace.
+
+```cpp
+auto client = wirestead::tcp_client("127.0.0.1", 8080)
+    .read_buffer_size(64 * 1024)
+    .build();
+```
+
+TCP and UDS builders call it `read_buffer_size`; serial calls the same setting
+`read_chunk`, a name it had first. All default to 4 KiB and clamp to
+512 B – 1 MiB.
+
+Raising it cuts read completions, and so callback dispatches, on bulk
+transfers. It buys nothing for small messages that already arrive one per read.
+The ceiling is deliberately far below the socket buffer ceiling because this
+buffer is **per connection** — a server multiplies it by `max_connections`, so
+1 MiB against the default 1024 connection limit is a gigabyte of userspace
+buffers before any payload arrives.
 
 ---
 

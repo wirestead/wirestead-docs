@@ -76,6 +76,30 @@ However, minor releases may still refine APIs when needed to improve:
 - packaging correctness
 - cross-platform behavior
 
+## Builder Return Convention
+
+Every builder setter returns `Derived&` and mutates the builder in place, so a
+chain and a sequence of separate statements do the same thing:
+
+```cpp
+auto b = wirestead::tcp_client("127.0.0.1", 8080);
+b.on_data(handler);                     // b is still usable
+auto client = b.on_error(eh).build();
+```
+
+Before v0.9.3 the handler setters — `on_data`, `on_data_batch`, `on_message`,
+`on_message_batch`, `on_error` — instead returned a *new* builder of a
+different type and left the original moved-from, while the remaining setters
+returned a reference. That split is gone, along with the `BuilderState`
+template parameter and the `Rebind` alias behind it.
+
+Chained code is unaffected, which is how every example in these docs is
+written. Two forms needed updating in v0.9.3: spelling a builder type with its
+state argument (`TcpClientBuilder<>` became `TcpClientBuilder`), and capturing
+the result of a handler setter, which now hands back a reference to the same
+builder rather than a new object. The `*BuilderDefault` aliases still name the
+builders.
+
 ## ABI Compatibility
 
 C++ ABI compatibility is not guaranteed before v1.0.
