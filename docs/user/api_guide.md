@@ -50,7 +50,8 @@ auto channel = wirestead::{type}(params)
 | `.auto_start(bool)`             | Auto-start/stop the wrapper (starts immediately when `true`)      | `false`  |
 | `.independent_context(bool)`     | Create and run a dedicated `io_context` thread managed by wirestead | `false`  |
 | `.use_line_framer(...)`          | Split incoming bytes into delimiter-based messages                | Disabled |
-| `.use_packet_framer(...)`        | Split incoming bytes into packet-based messages                   | Disabled |
+| `.use_packet_framer(...)`        | Split incoming bytes on a start/end byte pattern                  | Disabled |
+| `.use_length_prefix_framer(...)` | Split incoming bytes on a length prefix; safe for binary payloads | Disabled |
 | `.on_message(callback)`          | Handle framed messages (`const MessageContext&`)                  | None     |
 | `.build()`                       | **Required**: Build the wrapper instance                          | -        |
 
@@ -118,6 +119,30 @@ Use `.on_message()` together with a framer when you want callback flow to operat
     std::cout << "Framed message: " << ctx.data() << std::endl;
 })
 ```
+
+#### Choosing a framer
+
+| Framer | Splits on | Use when |
+| --- | --- | --- |
+| `use_line_framer(delim)` | a delimiter, `\n` by default | text-line protocols |
+| `use_packet_framer(start, end, max)` | a start and end byte pattern | the payload cannot contain the end pattern |
+| `use_length_prefix_framer(bytes, endian, max)` | a length prefix, 2 bytes big-endian by default | **binary payloads** |
+
+`use_packet_framer()` has no escaping: the **first** occurrence of the end
+pattern ends the frame, wherever it falls. A binary payload that happens to
+contain those bytes is silently truncated, and the byte counters still balance,
+so nothing reports an error. For any protocol whose payload can hold arbitrary
+bytes, use `use_length_prefix_framer()` - the length says how many bytes to
+collect, so no byte value is special:
+
+```cpp
+.use_length_prefix_framer(4)   // 4-byte big-endian length, excluding the prefix
+.on_message([](const wirestead::MessageContext& ctx) { /* ... */ })
+```
+
+It does require the stream to start on a frame boundary, which is the normal
+case for TCP and UDS. It cannot resynchronise mid-stream, so a serial line
+joined partway through needs a framer with a sync word instead.
 
 **Lifecycle Methods:**
 | Method | Description |

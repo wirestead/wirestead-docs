@@ -155,10 +155,18 @@ For UDP, backpressure applies only to the local sender-side queue. UDP has no re
 |---|---:|---:|---:|---:|---:|---:|---:|
 | `use_line_framer(...)` | ✅ | ✅ | ⚠️ | ⚠️ | ✅ | ✅ | ✅ |
 | `use_packet_framer(...)` | ✅ | ✅ | ⚠️ | ⚠️ | ✅ | ✅ | ✅ |
+| `use_length_prefix_framer(...)` | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ | ✅ | ✅ |
 | `on_message(...)` | ✅ | ✅ | ⚠️ | ⚠️ | ✅ | ✅ | ✅ |
 | `on_message_batch(...)` | ✅ | ✅ | ⚠️ | ⚠️ | ✅ | ✅ | ✅ |
 
 UDP already preserves datagram boundaries. Framers may still be useful when the datagram payload itself contains multiple logical messages, but they are not needed to recover stream boundaries.
+
+`use_length_prefix_framer(...)` is the one to reach for with binary payloads:
+`use_packet_framer(...)` ends a frame at the first occurrence of its end pattern
+and has no escaping, so a payload containing those bytes is silently truncated.
+It is marked ⚠️ for Serial because it cannot resynchronise - it needs a stream
+that starts on a frame boundary, which a serial line joined mid-stream does not
+give you.
 
 ## Reconnect / Retry Support
 
@@ -182,6 +190,15 @@ TCP and UDS client retry settings apply to connect/reconnect behavior. TCP serve
 | `keep_alive(true)` | ✅ | ✅ | — | — | — | — | — |
 | `send_buffer_size(bytes)` | ✅ | ✅ | ✅ | ✅ | — | — | — |
 | `receive_buffer_size(bytes)` | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| `broadcast(true)` | — | — | ✅ | ✅ | — | — | — |
+| `multicast_group(address)` | — | — | ✅ | ✅ | — | — | — |
+
+`multicast_group(...)` joins the group after bind, so the socket receives what
+the group is sending. It is unrelated to `broadcast(...)`, which only sets
+`SO_BROADCAST` for outgoing datagrams - joining a group is what a lidar or
+camera stream needs on the receive side. A failed join fails `start()` rather
+than being ignored, because a socket that silently did not join looks exactly
+like a sensor that stopped sending.
 
 Socket tuning options request OS socket settings. The operating system may clamp or ignore requested values depending on platform limits.
 
