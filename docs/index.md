@@ -6,6 +6,17 @@ Serial · TCP · UDP · UDS
 
 Choose the guide that matches your role.
 
+> **Where documentation lives.** This site answers *how do I use this*: quick
+> start, installation, the API guide, the transport matrix, troubleshooting. The
+> [core repository's `docs/`](https://github.com/wirestead/wirestead/tree/main/docs)
+> answers *how does this behave, and why* - the callback data lifetime, the error
+> model, the threat model, what a tuning knob costs. API signatures are in
+> neither: Doxygen generates those from the headers, so they cannot go stale.
+>
+> A few documents exist in both because the core repository has to stand on its
+> own; the versions there are minimal and the ones here are the extended ones.
+> Neither should grow into the other.
+
 ---
 
 ## 📖 For Library Users
@@ -52,7 +63,7 @@ You are developing or extending wirestead itself.
 | [Build Guide](contributor/build_guide.md) | CMake options, build profiles, sanitizers |
 | [Testing](contributor/testing.md) | Running tests, CI integration |
 | [Orin Nano Validation](contributor/orin_nano_validation.md) | Ubuntu 22.04 ARM64 build and test runbook |
-| [Release Checklist](contributor/release_checklist.md) | Release validation and packaging checklist |
+| [Release Checklist](https://github.com/wirestead/wirestead/blob/main/docs/release_checklist.md) | Release validation and packaging checklist, maintained in the core repository |
 | [Implementation Status](contributor/implementation_status.md) | Verified scope and known gaps |
 | [Test Structure](contributor/test_structure.md) | Test organization and coverage |
 | [Architecture Overview](contributor/architecture/) | Layers, responsibilities, design patterns |
