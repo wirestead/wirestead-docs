@@ -146,6 +146,19 @@ For UDP, backpressure applies only to the local sender-side queue. UDP has no re
 | Failed send counters | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | BestEffort drop counters | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Queue gauges | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `last_receive_age_ms` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `client_stats(id)` | — | ✅ | — | ⚠️ | — | — | ✅ |
+
+`last_receive_age_ms` is milliseconds since bytes last arrived, `nullopt` until
+some have, and cleared by `reset_stats()`. It is the only field that notices a
+device which stopped sending without failing - every other counter still looks
+healthy and the link still reports connected.
+
+`client_stats(id)` is ⚠️ on UDP servers because they always return `nullopt`:
+their clients are endpoint abstractions with no queues or counters of their own,
+so that traffic is only visible in the aggregate. On TCP and UDS servers it
+returns `nullopt` for an unknown or already-disconnected client, whose counters
+have folded into the server-wide totals.
 
 `failed_sends` and dropped counters describe different events. `failed_sends` means the new payload was rejected before local acceptance. `dropped_messages` and `dropped_bytes` mean previously accepted queued payloads were discarded by BestEffort.
 
@@ -192,6 +205,10 @@ TCP and UDS client retry settings apply to connect/reconnect behavior. TCP serve
 | `receive_buffer_size(bytes)` | ✅ | ✅ | ✅ | ✅ | — | — | — |
 | `broadcast(true)` | — | — | ✅ | ✅ | — | — | — |
 | `multicast_group(address)` | — | — | ✅ | ✅ | — | — | — |
+| `tls(...)` | ✅ | ✅ | — | — | — | — | — |
+| `low_latency(bool)` | — | — | — | — | ✅ | — | — |
+| `rs485(...)`, `dtr(bool)`, `rts(bool)` | — | — | — | — | ✅ | — | — |
+| `rx_idle_timeout(ms)` | — | — | — | — | ✅ | — | — |
 
 `multicast_group(...)` joins the group after bind, so the socket receives what
 the group is sending. It is unrelated to `broadcast(...)`, which only sets
@@ -199,6 +216,14 @@ the group is sending. It is unrelated to `broadcast(...)`, which only sets
 camera stream needs on the receive side. A failed join fails `start()` rather
 than being ignored, because a socket that silently did not join looks exactly
 like a sensor that stopped sending.
+
+`tls(...)` requires a build with `-DWIRESTEAD_ENABLE_TLS=ON`; a default build has
+no OpenSSL dependency and no TLS code. The serial device options are covered in
+the [API guide](api_guide.md); `low_latency` is the one that defaults **on**.
+
+`wirestead::concurrency::set_io_thread_init(fn)` is process-wide rather than
+per-transport, so it has no column here: it runs on every io thread the library
+starts, whichever transport started it.
 
 Socket tuning options request OS socket settings. The operating system may clamp or ignore requested values depending on platform limits.
 
