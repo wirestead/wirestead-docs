@@ -195,6 +195,70 @@ Configure socket tuning before `.build()` or before calling `start()` on a wrapp
 
 These options request operating system socket settings. The operating system may clamp or ignore requested buffer sizes depending on system limits, so treat them as workload tuning controls rather than performance guarantees.
 
+### TLS (optional)
+
+TCP builders accept TLS when the library was built with
+`-DWIRESTEAD_ENABLE_TLS=ON`, which adds OpenSSL. A default build has no OpenSSL
+dependency and no TLS code in it, so this is opt-in at build time as well as at
+call time.
+
+```cpp
+auto server = wirestead::tcp_server(9000)
+                  .tls("server.crt", "server.key")
+                  .on_data(...)
+                  .build();
+
+auto client = wirestead::tcp_client("example.com", 9000)
+                  .tls("ca.pem")          // verifies the server against this CA
+                  .on_data(...)
+                  .build();
+```
+
+Setting only half of the server pair fails `start()` rather than falling back to
+plaintext. The threat model, and what TLS here does and does not cover, is in
+the core repository's
+[security notes](https://github.com/wirestead/wirestead/blob/main/docs/security.md).
+
+### Observing a link
+
+`stats()` returns a `RuntimeStats` snapshot on every wrapper, and servers add
+`client_stats(id)` for one connected client:
+
+```cpp
+const auto s = channel->stats();
+if (s.last_receive_age_ms && *s.last_receive_age_ms > 500) {
+    // connected, no error, and nothing arriving
+}
+```
+
+`last_receive_age_ms` is milliseconds since bytes last arrived, and `nullopt`
+until some have. It is the only field that notices a device which stopped
+sending without failing: everything else still looks healthy and the link still
+reports connected. `reset_stats()` clears it.
+
+`client_stats(id)` returns `nullopt` for an unknown or disconnected client - a
+session's counters fold into the server-wide totals when it goes away. UDP
+servers always return `nullopt`, since their clients are endpoint abstractions
+with no queues of their own.
+
+### Io thread policy (advanced)
+
+`wirestead::concurrency::set_io_thread_init(fn)` installs a process-wide hook
+that runs on every io thread the library starts, which is where `SCHED_FIFO`,
+CPU affinity or thread naming go:
+
+```cpp
+wirestead::concurrency::set_io_thread_init([] {
+    sched_param p{};
+    p.sched_priority = 10;
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &p);
+});
+```
+
+Set it before starting anything. It is process-wide rather than per-instance
+because thread policy belongs to the deployment, and because the APIs involved
+must run *on* the thread they configure.
+
 **Builder Flow**
 
 ```
@@ -525,8 +589,30 @@ wirestead::serial(const std::string& device, uint32_t baud_rate)
 | `parity(mode)`              | `string`   | Set serial parity before `build()`                        |
 | `flow_control(mode)`        | `string`   | Set flow control before `build()`                         |
 | `retry_interval(ms)`        | `unsigned` | Set reconnection interval (default `1000`)                |
+| `low_latency(enable)`       | `bool`     | Clear the driver's receive latency timer (default **on**) |
+| `rs485(rts_on_send, rx_during_tx, delay_before_ms, delay_after_ms)` | | Drive the direction pin for a half-duplex bus |
+| `dtr(assert)` / `rts(assert)` | `bool`   | Drive a modem control line; unset means leave the driver's default |
+| `rx_idle_timeout(ms)`       | `unsigned` | Tear down and reopen when no bytes arrive for this long (default off) |
 | `independent_context()`     | `bool`     | Run on a dedicated `io_context` thread managed by wirestead |
 | `auto_start()`             | `bool`     | Auto-start immediately and stop on destruction            |
+
+**Serial device options.** `low_latency` is on by default because FTDI-style USB
+adapters otherwise hold received bytes behind a 16 ms timer - larger than every
+other latency in the stack. Ports that do not support it answer `ENOTTY`, which
+is not an error.
+
+`rs485(...)` is required for a half-duplex bus: without it the port stays in
+UART mode, every write collides, and the device's replies arrive as garbage. A
+port that refuses the ioctl logs a warning rather than failing, because a plain
+UART refuses it too.
+
+`dtr()` and `rts()` are unset by default, and "leave the driver's default alone"
+is a different request from "drive it low" - an Arduino reboots when DTR is
+asserted at open.
+
+`rx_idle_timeout` is off by default. It watches **receives only**, unlike a
+bidirectional idle timeout, and expiry tears the link down, so a value below the
+device's real message gap produces a reopen loop instead of a recovery.
 
 #### Instance Methods
 
