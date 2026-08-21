@@ -11,7 +11,9 @@ This guide describes the system requirements and dependencies needed to build an
 - **Ubuntu 22.04 LTS or later**
 - **C++20 compatible compiler and standard library** (GCC 10+, recent Clang/libc++, or MSVC 2022+)
 - **CMake 3.12 or later** for plain builds; **CMake 3.21 or later** for the repository presets
-- **Boost 1.83.0 or later**, preferably supplied by vcpkg
+- **Boost 1.74.0 or later**. The system packages on Ubuntu 22.04 (1.74), RHEL 9
+  (1.75) and Ubuntu 24.04 (1.83) all satisfy this; vcpkg is still the simplest
+  way to build against a newer Boost than a distribution supplies.
 
 ### Supported Platforms
 
@@ -52,8 +54,9 @@ cmake -S . -B build \
 ```
 
 If you use system packages instead of vcpkg for source builds, the selected
-Boost installation must be 1.83.0 or later. The default Ubuntu 22.04 and 24.04
-apt Boost packages do not satisfy this baseline.
+Boost installation must be 1.74.0 or later. The default apt Boost on Ubuntu
+22.04 (1.74) and 24.04 (1.83) both satisfy that, so no extra Boost is needed on
+either.
 
 ### Dependency Details
 
@@ -62,7 +65,7 @@ apt Boost packages do not satisfy this baseline.
 | **GCC/G++** | 10+            | GPL          | C++20 compiler                                                            |
 | **Clang**   | 14+ (optional) | Apache 2.0   | Alternative C++20 compiler                                                |
 | **CMake**   | 3.12+ / 3.21+  | BSD-3-Clause | Build system; 3.21+ is needed only for repository presets                 |
-| **Boost**   | 1.83.0+        | BSL 1.0      | Asio for async I/O                                                        |
+| **Boost**   | 1.74.0+        | BSL 1.0      | Asio for async I/O                                                        |
 
 ---
 
@@ -86,7 +89,7 @@ apt Boost packages do not satisfy this baseline.
 
 ### For Applications Using wirestead
 
-Applications must be able to resolve the same Boost 1.83.0+ dependency set used to build `wirestead`. vcpkg consumers get this through the vcpkg toolchain; source/package consumers should provide a compatible Boost installation through their package environment.
+Applications must be able to resolve the same Boost 1.74.0+ dependency set used to build `wirestead`. vcpkg consumers get this through the vcpkg toolchain; source and distribution-package consumers can use the system Boost on any of the platforms listed above.
 
 ### Thread Support
 
@@ -99,9 +102,13 @@ Applications must be able to resolve the same Boost 1.83.0+ dependency set used 
 
 ### Ubuntu 22.04 LTS
 
-- Default GCC/Boost packages do **not** meet all requirements
-- Install GCC 10+ and use vcpkg or a custom Boost 1.83.0+ installation
-- Supported as a build target when those dependencies are supplied explicitly
+- **The default GCC and Boost packages are enough** as of v0.9.5, which lowered
+  the Boost minimum to 1.74 - exactly what Jammy ships. GCC 11 covers the C++20
+  subset in use.
+- `apt install build-essential cmake libboost-all-dev libspdlog-dev` is a
+  complete dependency set; vcpkg is optional here rather than required.
+- CI builds and runs the test suite on this platform against those system
+  packages, on amd64 and arm64.
 
 ### Ubuntu ARM64 / Jetson Orin Nano
 
@@ -123,8 +130,11 @@ Applications must be able to resolve the same Boost 1.83.0+ dependency set used 
 
 ### Other Linux Distributions
 
-- Debian/Fedora/RHEL/Arch builds should work when GCC 10+ and Boost 1.83.0+ are supplied
-- CentOS/RHEL 8+: May require SCL or manual compiler installation
+- Debian/Fedora/RHEL/Arch builds should work when GCC 10+ and Boost 1.74.0+ are supplied
+- RHEL 9 / CentOS Stream 9: system `boost-devel` is 1.75, which is enough. CI
+  builds and tests this platform. `spdlog-devel` comes from EPEL.
+- RHEL 8 is **not** supported: its Boost is 1.66, below the minimum, and its
+  default GCC 8 does not implement the C++20 features this library uses.
 - Arch Linux: Fully supported with latest packages
 
 ---
