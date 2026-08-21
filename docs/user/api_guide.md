@@ -584,15 +584,15 @@ wirestead::serial(const std::string& device, uint32_t baud_rate)
 
 | Method                      | Parameters | Description                                               |
 | --------------------------- | ---------- | --------------------------------------------------------- |
-| `data_bits(bits)`           | `int`      | Set serial data bits before `build()`                     |
-| `stop_bits(bits)`           | `int`      | Set serial stop bits before `build()`                     |
-| `parity(mode)`              | `string`   | Set serial parity before `build()`                        |
-| `flow_control(mode)`        | `string`   | Set flow control before `build()`                         |
-| `retry_interval(ms)`        | `unsigned` | Set reconnection interval (default `1000`)                |
+| `data_bits(bits)`           | `unsigned` | Set serial data bits before `build()`                     |
+| `stop_bits(bits)`           | `unsigned` | Set serial stop bits before `build()`                     |
+| `parity(mode)`              | `string` or `SerialConfig::Parity` | Set serial parity before `build()`      |
+| `flow_control(mode)`        | `string` or `SerialConfig::Flow`   | Set flow control before `build()`       |
+| `retry_interval(interval)`  | `std::chrono::milliseconds` | Set reconnection interval (default `1000ms`) |
 | `low_latency(enable)`       | `bool`     | Clear the driver's receive latency timer (default **on**) |
-| `rs485(rts_on_send, rx_during_tx, delay_before_ms, delay_after_ms)` | | Drive the direction pin for a half-duplex bus |
+| `rs485(rts_on_send, rx_during_tx, delay_before_ms, delay_after_ms)` | `bool, bool, unsigned, unsigned` | Drive the direction pin for a half-duplex bus |
 | `dtr(assert)` / `rts(assert)` | `bool`   | Drive a modem control line; unset means leave the driver's default |
-| `rx_idle_timeout(ms)`       | `unsigned` | Tear down and reopen when no bytes arrive for this long (default off) |
+| `rx_idle_timeout(timeout)`  | `std::chrono::milliseconds` | Tear down and reopen when no bytes arrive for this long (default off) |
 | `independent_context()`     | `bool`     | Run on a dedicated `io_context` thread managed by wirestead |
 | `auto_start()`             | `bool`     | Auto-start immediately and stop on destruction            |
 
