@@ -454,15 +454,20 @@ std::weak_ptr<Connection> conn_;     // Non-owning reference
 For high-performance scenarios, transports use a bucketed pool and an RAII buffer wrapper.
 
 ```cpp
+#include "wirestead/base/common.hpp"
+#include "wirestead/memory/memory_pool.hpp"
+
+using namespace wirestead;
+
 // Acquire/release with size buckets (1KB/4KB/16KB/64KB)
-auto buf = GlobalMemoryPool::instance().acquire(4096);
+auto buf = memory::GlobalMemoryPool::instance().acquire(4096);
 // ... use buf.get() ...
-GlobalMemoryPool::instance().release(std::move(buf), 4096);
+memory::GlobalMemoryPool::instance().release(std::move(buf), 4096);
 
 // Preferred: RAII wrapper used by transports
-common::PooledBuffer pooled(common::MemoryPool::BufferSize::MEDIUM);
+memory::PooledBuffer pooled(memory::MemoryPool::BufferSize::MEDIUM);
 if (pooled.valid()) {
-    common::safe_memory::safe_memcpy(pooled.data(), src, pooled.size());
+    base::safe_memory::safe_memcpy(pooled.data(), src, pooled.size());
 }
 ```
 
@@ -589,7 +594,7 @@ auto host = std::any_cast<std::string>(config->get("tcp.client.host"));
 auto port = static_cast<uint16_t>(std::any_cast<int>(config->get("tcp.client.port")));
 
 auto client = wirestead::tcp_client(host, port)
-    .retry_interval(static_cast<unsigned>(
+    .retry_interval(std::chrono::milliseconds(
         std::any_cast<int>(config->get("tcp.client.retry_interval_ms"))
     ))
     .build();
@@ -628,10 +633,14 @@ auto buffer = buffer_pool_.acquire(1024);  // Fast!
 ### 1. Custom Transports
 
 ```cpp
-class MyCustomTransport : public transport::TransportInterface {
-    void connect() override { /* ... */ }
-    void send(const std::string& data) override { /* ... */ }
-    // ... implement interface
+class MyCustomTransport : public wirestead::interface::Channel {
+    void start() override { /* ... */ }
+    void stop() override { /* ... */ }
+    bool is_connected() const override { /* ... */ }
+    bool async_write_copy(wirestead::memory::ConstByteSpan data) override { /* ... */ }
+    void on_bytes(OnBytes cb) override { /* ... */ }
+    void on_state(OnState cb) override { /* ... */ }
+    // ... the remaining pure virtuals of interface::Channel
 };
 ```
 
@@ -648,6 +657,8 @@ class MyCustomBuilder : public BuilderInterface<MyWrapper> {
 ### 3. Custom Error Handlers
 
 ```cpp
+using namespace wirestead::diagnostics;
+
 ErrorHandler::instance().register_callback([](const ErrorInfo& error) {
     // Custom error handling logic
     send_to_monitoring_system(error);
@@ -703,7 +714,7 @@ auto client = tcp_client("127.0.0.1", 8080)
 
 ```cpp
 // Check internal state
-ASSERT_EQ(client->get_state(), State::CONNECTED);
+ASSERT_TRUE(client->connected());
 ASSERT_TRUE(server->listening());
 ```
 

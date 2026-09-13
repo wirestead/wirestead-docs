@@ -85,20 +85,19 @@ Utility functions prevent undefined behavior:
 ```cpp
 #include "wirestead/base/common.hpp"
 
-using namespace wirestead::common::safe_convert;
+using namespace wirestead::base::safe_convert;
 
 // Safe uint8_t* to string conversion
 const uint8_t* data = ...;
 size_t size = ...;
 std::string str = uint8_to_string(data, size);  // Null-check included
 
-// Safe string to uint8_t* conversion
+// Safe string to byte conversion (owning copy)
 std::string input = "Hello";
-const uint8_t* bytes = string_to_uint8(input);
-size_t len = input.size();
+std::vector<uint8_t> bytes = string_to_uint8(input);
 
-// Safe numeric conversions with bounds checking
-int value = safe_cast<int>(long_value);  // Checks range
+// Non-owning view over the same bytes, no allocation
+auto [ptr, len] = string_to_bytes(input);
 ```
 
 ---
@@ -182,7 +181,7 @@ wirestead::concurrency::ThreadSafeState<ConnectionState> state(ConnectionState::
 state.set_state(ConnectionState::Connecting);
 
 // Thread 2: Read (concurrent safe)
-ConnectionState current = state.get_state();
+ConnectionState current = state.state();
 
 // Thread 3: Conditional update
 bool updated = state.compare_and_set(
@@ -242,18 +241,21 @@ size_t value = counter.get();
 Condition variable supported flags:
 
 ```cpp
-ThreadSafeFlag ready_flag;
+wirestead::concurrency::ThreadSafeFlag ready_flag;
 
-// Thread 1: Wait for flag
-ready_flag.wait();  // Blocks until set
-std::cout << "Ready!" << std::endl;
+// Thread 1: Wait for flag. The timeout is not optional - the wait returns
+// when it elapses whether or not the flag was set, so re-check afterwards.
+ready_flag.wait_for_true(std::chrono::seconds(5));
+if (ready_flag.get()) {
+    std::cout << "Ready!" << std::endl;
+}
 
 // Thread 2: Set flag
 std::this_thread::sleep_for(std::chrono::seconds(1));
 ready_flag.set();  // Unblocks waiting thread
 
 // Thread 3: Check without blocking
-if (ready_flag.is_set()) {
+if (ready_flag.get()) {
     // Flag is set
 }
 ```
@@ -294,13 +296,18 @@ Monitor all memory allocations and deallocations:
 ```cpp
 #include "wirestead/memory/memory_tracker.hpp"
 
-// Tracking happens automatically
-auto* data = new uint8_t[1024];  // Tracked
-delete[] data;  // Tracked
+// Tracking is not automatic - nothing hooks global new/delete. An allocation
+// is only recorded if it is reported through the tracker, which is what the
+// MEMORY_TRACK_* macros do (they compile to nothing unless the build sets
+// WIRESTEAD_ENABLE_MEMORY_TRACKING).
+auto* data = new uint8_t[1024];
+MEMORY_TRACK_ALLOCATION(data, 1024);
+MEMORY_TRACK_DEALLOCATION(data);
+delete[] data;
 
 // Query statistics
 wirestead::memory::MemoryTracker::MemoryStats stats =
-    wirestead::memory::MemoryTracker::instance().get_stats();
+    wirestead::memory::MemoryTracker::instance().stats();
 std::cout << "Total allocations: " << stats.total_allocations << std::endl;
 std::cout << "Total deallocations: " << stats.total_deallocations << std::endl;
 std::cout << "Current usage: " << stats.current_bytes_allocated << " bytes" << std::endl;
@@ -314,7 +321,9 @@ Identify potential memory leaks:
 
 ```cpp
 // At program exit, check for leaks
-auto stats = wirestead::memory::MemoryTracker::instance().get_stats();
+using wirestead::memory::MemoryTracker;
+
+auto stats = MemoryTracker::instance().stats();
 
 if (stats.total_allocations != stats.total_deallocations) {
     size_t leaked = stats.total_allocations - stats.total_deallocations;
@@ -322,20 +331,22 @@ if (stats.total_allocations != stats.total_deallocations) {
               << leaked << " allocations not freed" << std::endl;
 
     // Get detailed report
-    MemoryTracker::instance().print_report();
+    MemoryTracker::instance().print_leak_report();
 }
 ```
 
 **Output example:**
 
 ```
-=== Memory Tracking Report ===
-Total allocations: 1250
-Total deallocations: 1248
-Leaked allocations: 2
-Current memory usage: 2048 bytes
-Peak memory usage: 4096 bytes
+=== Memory Leak Report ===
+Found 2 potential memory leaks:
+Leaked: 1024 bytes at 0x5561f0a2c2a0 allocated in src/session.cc:87 (start)
+Leaked: 1024 bytes at 0x5561f0a2c6b0 allocated in src/session.cc:87 (start)
+Total leaked bytes: 2048
 ```
+
+`print_memory_report()` prints the counter block instead — every `MemoryStats`
+field, followed by one line per still-live allocation.
 
 ---
 
@@ -344,13 +355,11 @@ Peak memory usage: 4096 bytes
 Track memory usage patterns:
 
 ```cpp
-// Track peak memory usage
-size_t peak = MemoryTracker::instance().get_peak_usage();
-std::cout << "Peak memory: " << peak << " bytes" << std::endl;
+// One snapshot carries every counter; there are no per-metric getters.
+auto stats = wirestead::memory::MemoryTracker::instance().stats();
 
-// Track allocation count
-size_t alloc_count = MemoryTracker::instance().get_allocation_count();
-std::cout << "Allocations: " << alloc_count << std::endl;
+std::cout << "Peak memory: " << stats.peak_bytes_allocated << " bytes" << std::endl;
+std::cout << "Allocations: " << stats.total_allocations << std::endl;
 ```
 
 ---
@@ -360,11 +369,15 @@ std::cout << "Allocations: " << alloc_count << std::endl;
 Detailed memory usage reports:
 
 ```cpp
-// Print detailed report to stdout
-MemoryTracker::instance().print_report();
+using wirestead::memory::MemoryTracker;
 
-// Or get as string
-std::string report = MemoryTracker::instance().get_report_string();
+// Print detailed reports to stdout
+MemoryTracker::instance().print_memory_report();
+MemoryTracker::instance().print_leak_report();
+
+// Or route them through the logger (recommended for production)
+MemoryTracker::instance().log_memory_report();
+MemoryTracker::instance().log_leak_report();
 ```
 
 ---
@@ -478,8 +491,8 @@ uint8_t* ptr = buffer + offset;  // May go out of bounds
 
 ```cpp
 // Use safe conversion utilities
-std::string str = safe_convert::uint8_to_string(data, size);
-const uint8_t* bytes = safe_convert::string_to_uint8(str);
+std::string str = wirestead::base::safe_convert::uint8_to_string(data, size);
+std::vector<uint8_t> bytes = wirestead::base::safe_convert::string_to_uint8(str);
 ```
 
 #### ❌ DON'T
@@ -521,12 +534,16 @@ client->send(data);  // Already thread-safe
 
 #### ✅ DO
 
-```cpp
-// Enable in Debug builds
-cmake -DCMAKE_BUILD_TYPE=Debug -DWIRESTEAD_ENABLE_MEMORY_TRACKING=ON
+Enable in Debug builds:
 
-// Check for leaks at exit
-auto stats = MemoryTracker::instance().get_stats();
+```bash
+cmake -DCMAKE_BUILD_TYPE=Debug -DWIRESTEAD_ENABLE_MEMORY_TRACKING=ON
+```
+
+Check for leaks at exit:
+
+```cpp
+auto stats = wirestead::memory::MemoryTracker::instance().stats();
 assert(stats.total_allocations == stats.total_deallocations);
 ```
 

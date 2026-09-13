@@ -389,6 +389,10 @@ public:
         // Handle data: ctx.data()
     }
 
+    void on_connect(const wirestead::ConnectionContext& ctx) {
+        // Handle connect
+    }
+
     void connect() {
         client_ = wirestead::tcp_client("server.com", 8080)
             .on_data(this, &MyClient::on_data)  // Member function!
@@ -938,10 +942,16 @@ ErrorHandler::instance().set_min_error_level(ErrorLevel::WARNING);
 ### Error Statistics
 
 ```cpp
-auto stats = ErrorHandler::instance().get_error_stats();
+using namespace wirestead::diagnostics;
+
+auto stats = ErrorHandler::instance().error_stats();
 std::cout << "Total errors: " << stats.total_errors << std::endl;
-std::cout << "Critical: " << stats.critical_count << std::endl;
-std::cout << "Errors: " << stats.error_count << std::endl;
+
+// Per-level counts live in errors_by_level, indexed by ErrorLevel.
+std::cout << "Critical: "
+          << stats.errors_by_level[static_cast<size_t>(ErrorLevel::CRITICAL)] << std::endl;
+std::cout << "Errors: "
+          << stats.errors_by_level[static_cast<size_t>(ErrorLevel::ERROR)] << std::endl;
 ```
 
 ---
@@ -1024,6 +1034,7 @@ _(Available when built with `WIRESTEAD_ENABLE_CONFIG=ON`)_
 
 ```cpp
 #include <any>
+#include <chrono>
 #include "wirestead/config/config_factory.hpp"
 
 auto config = wirestead::config::ConfigFactory::create_with_defaults();
@@ -1031,13 +1042,13 @@ config->load_from_file("wirestead.conf");
 
 auto host = std::any_cast<std::string>(config->get("tcp.client.host"));
 auto port = static_cast<uint16_t>(std::any_cast<int>(config->get("tcp.client.port")));
-auto retry_interval_ms = static_cast<unsigned>(
+auto retry_interval = std::chrono::milliseconds(
     std::any_cast<int>(config->get("tcp.client.retry_interval_ms"))
 );
 
 // Create client from config
 auto client = wirestead::tcp_client(host, port)
-    .retry_interval(retry_interval_ms)
+    .retry_interval(retry_interval)
     .build();
 ```
 
@@ -1247,18 +1258,23 @@ Set the strategy via the transport config before starting:
 ```cpp
 #include <wirestead/wirestead.hpp>
 #include "wirestead/base/constants.hpp"
+#include "wirestead/config/tcp_client_config.hpp"
+#include "wirestead/factory/channel_factory.hpp"
 
 using wirestead::base::constants::BackpressureStrategy;
 
 // TCP client — real-time sensor stream
-config::TcpClientConfig cfg;
+wirestead::config::TcpClientConfig cfg;
 cfg.host = "192.168.1.10";
 cfg.port = 8080;
 cfg.backpressure_threshold = 512 * 1024;            // 512 KiB threshold
 cfg.backpressure_strategy  = BackpressureStrategy::BestEffort;
 
-auto client = TcpClient::create(cfg, ioc);
-client->on_backpressure([](size_t queued_bytes) {
+// ChannelFactory::create() takes the config and returns a transport channel;
+// wrap it in the matching wrapper to get the wrapper-level API.
+auto channel = wirestead::factory::ChannelFactory::create(cfg, ioc);
+wirestead::TcpClient client(channel);
+client.on_backpressure([](size_t queued_bytes) {
     // sender-side queued byte count crossed a watermark
 });
 ```

@@ -432,8 +432,9 @@ int main() {
 ```cpp
 // Reliable prevents sender-side queue drops, but cannot prevent
 // network-level or receiver-side packet loss.
-auto udp = wirestead::udp_client("192.168.1.100", 9000)
-    .backpressure_strategy(wirestead::BackpressureStrategy::Reliable)
+auto udp = wirestead::udp_client(0)
+    .remote("192.168.1.100", 9000)
+    .backpressure_strategy(wirestead::base::constants::BackpressureStrategy::Reliable)
     .build();
 ```
 
