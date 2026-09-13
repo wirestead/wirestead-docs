@@ -319,11 +319,11 @@ client->start();
 std::atomic<bool> is_ready{false};
 
 auto client = wirestead::tcp_client("server.com", 8080)
-    .on_connect([&is_ready]() {
+    .on_connect([&is_ready](const wirestead::ConnectionContext&) {
         is_ready = true;
         // Initialize resources
     })
-    .on_disconnect([&is_ready]() {
+    .on_disconnect([&is_ready](const wirestead::ConnectionContext&) {
         is_ready = false;
         // Cleanup or pause operations
     })
