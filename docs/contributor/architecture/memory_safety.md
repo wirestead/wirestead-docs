@@ -161,115 +161,31 @@ process_data(wirestead::memory::ConstByteSpan(buffer));
 
 ## Thread-Safe State Management
 
-### ThreadSafeState
-
-Read-write lock based state management:
-
-```cpp
-#include "wirestead/concurrency/thread_safe_state.hpp"
-
-enum class ConnectionState {
-    Closed,
-    Connecting,
-    Connected,
-    Error
-};
-
-wirestead::concurrency::ThreadSafeState<ConnectionState> state(ConnectionState::Closed);
-
-// Thread 1: Write
-state.set_state(ConnectionState::Connecting);
-
-// Thread 2: Read (concurrent safe)
-ConnectionState current = state.state();
-
-// Thread 3: Conditional update
-bool updated = state.compare_and_set(
-    ConnectionState::Connecting,  // Expected
-    ConnectionState::Connected     // New value
-);
-```
-
----
-
 ### AtomicState
 
-Lock-free atomic state operations:
+Lock-free state for trivially copyable types, wrapping `std::atomic`:
 
 ```cpp
 #include "wirestead/concurrency/thread_safe_state.hpp"
 
-AtomicState<int> counter(0);
+enum class ConnectionState { Closed, Connecting, Connected, Error };
 
-// Atomic increment (thread-safe)
-counter.fetch_add(1);
+wirestead::concurrency::AtomicState<ConnectionState> state(ConnectionState::Closed);
 
-// Atomic compare-and-swap
-int expected = 10;
-bool success = counter.compare_exchange_strong(expected, 20);
+// Thread 1: write
+state.set(ConnectionState::Connecting);
+
+// Thread 2: read
+ConnectionState current = state.get();
+
+// Thread 3: conditional update
+bool updated = state.compare_and_set(ConnectionState::Connecting,  // expected
+                                     ConnectionState::Connected);  // desired
 ```
 
-**Use when:**
-
-- High contention scenarios
-- Low latency required
-- Simple atomic types (int, bool, etc.)
-
----
-
-### ThreadSafeCounter
-
-Thread-safe counter with atomic operations:
-
-```cpp
-ThreadSafeCounter counter;
-
-// Thread 1
-counter.increment();
-
-// Thread 2
-counter.decrement();
-
-// Thread 3
-size_t value = counter.get();
-```
-
----
-
-### ThreadSafeFlag
-
-Condition variable supported flags:
-
-```cpp
-wirestead::concurrency::ThreadSafeFlag ready_flag;
-
-// Thread 1: Wait for flag. The timeout is not optional - the wait returns
-// when it elapses whether or not the flag was set, so re-check afterwards.
-ready_flag.wait_for_true(std::chrono::seconds(5));
-if (ready_flag.get()) {
-    std::cout << "Ready!" << std::endl;
-}
-
-// Thread 2: Set flag
-std::this_thread::sleep_for(std::chrono::seconds(1));
-ready_flag.set();  // Unblocks waiting thread
-
-// Thread 3: Check without blocking
-if (ready_flag.get()) {
-    // Flag is set
-}
-```
-
----
-
-### Thread Safety Summary
-
-| Primitive             | Lock-Free | Blocking | Use Case                 |
-| --------------------- | --------- | -------- | ------------------------ |
-| **ThreadSafeState**   | No        | No       | Complex state management |
-| **AtomicState**       | Yes       | No       | Simple atomic types      |
-| **ThreadSafeCounter** | Yes       | No       | Counters, statistics     |
-| **ThreadSafeFlag**    | No        | Yes      | Synchronization, signals |
+`wirestead::concurrency::AtomicLinkState` is `AtomicState<base::LinkState>`.
+`ThreadSafeState`, `ThreadSafeCounter` and `ThreadSafeFlag` were removed in
+v0.10.0; use `std::atomic`, a mutex, or `std::condition_variable` directly.
 
 ---
 
