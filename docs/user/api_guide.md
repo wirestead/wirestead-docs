@@ -1162,7 +1162,7 @@ auto server2 = wirestead::tcp_server(8081).shared_context(true).build();
 
 ```cpp
 wirestead::diagnostics::AsyncLogConfig config;
-config.batch_size = 100;
+config.flush_interval = std::chrono::milliseconds(100);
 wirestead::diagnostics::Logger::instance().set_async_logging(true, config);
 ```
 

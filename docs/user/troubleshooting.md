@@ -579,7 +579,7 @@ std::vector<uint8_t> create_binary_message(const std::string& data) {
 ```cpp
 // Don't let logging slow down I/O
 wirestead::diagnostics::AsyncLogConfig config;
-config.batch_size = 100;
+config.flush_interval = std::chrono::milliseconds(100);
 wirestead::diagnostics::Logger::instance().set_async_logging(true, config);
 ```
 

@@ -38,7 +38,6 @@ Logging can be a major bottleneck. Enable async logging for high-performance app
 ```cpp
 // ✅ GOOD: Async logging (non-blocking)
 wirestead::diagnostics::AsyncLogConfig config;
-config.batch_size = 1000;
 config.flush_interval = std::chrono::milliseconds(1000);
 
 wirestead::diagnostics::Logger::instance().set_async_logging(true, config);
