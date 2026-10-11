@@ -1385,7 +1385,9 @@ HTML_EXTRA_STYLESHEET  = doxygen/doxygen-awesome.css doxygen/custom-awesome.css
 # files will be copied as-is; there are no commands or markers available.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_EXTRA_FILES       = docs/assets/logo/dark/wirestead-logo-horizontal-readme-dark.png \
+HTML_EXTRA_FILES       = docs/assets/logo/wirestead-favicon.svg \
+                         docs/assets/logo/wirestead-favicon-64.png \
+                         docs/assets/logo/dark/wirestead-logo-horizontal-readme-dark.png \
                          doxygen/doxygen-awesome-darkmode-toggle.js \
                          doxygen/doxygen-awesome-fragment-copy-button.js \
                          doxygen/doxygen-awesome-paragraph-link.js \
