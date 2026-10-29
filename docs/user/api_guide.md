@@ -596,6 +596,7 @@ wirestead::serial(const std::string& device, uint32_t baud_rate)
 | `low_latency(enable)`       | `bool`     | Clear the driver's receive latency timer (default **on**) |
 | `rs485(rts_on_send, rx_during_tx, delay_before_ms, delay_after_ms)` | `bool, bool, unsigned, unsigned` | Drive the direction pin for a half-duplex bus |
 | `dtr(assert)` / `rts(assert)` | `bool`   | Drive a modem control line; unset means leave the driver's default |
+| `keep_dtr_on_close(enable)` | `bool`     | Linux: keep DTR asserted across close and reopen (default off) |
 | `rx_idle_timeout(timeout)`  | `std::chrono::milliseconds` | Tear down and reopen when no bytes arrive for this long (default off) |
 | `independent_context()`     | `bool`     | Run on a dedicated `io_context` thread managed by wirestead |
 | `auto_start()`             | `bool`     | Auto-start immediately and stop on destruction            |
@@ -612,7 +613,17 @@ UART refuses it too.
 
 `dtr()` and `rts()` are unset by default, and "leave the driver's default alone"
 is a different request from "drive it low" - an Arduino reboots when DTR is
-asserted at open.
+asserted at open. `dtr(false)` does not prevent that reboot: Linux asserts DTR
+while opening the port, before the setting applies, and every reopen reboots
+the board again.
+
+`keep_dtr_on_close()` stops the reopen reboots on Linux by asserting DTR and
+clearing the tty's `HUPCL` flag, so closing the port no longer drops DTR. The
+first open still resets the board, and unplugging or power loss still does. It
+conflicts with `dtr(false)`, and the connection fails if the driver or platform
+cannot retain DTR. The cleared `HUPCL` outlives `stop()` and the process;
+restore it with `stty -F /dev/ttyACM0 hupcl`. Set `rx_idle_timeout` above the
+board's reboot time so the first reset is not mistaken for a dead link.
 
 `rx_idle_timeout` is off by default. It watches **receives only**, unlike a
 bidirectional idle timeout, and expiry tears the link down, so a value below the
